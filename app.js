@@ -12,11 +12,7 @@ const io = socketIo(server);
 app.use(express.json());
 
 // Configure connections
-const connections = [
-  { ip: "37.58.208.109", port: 8040 },
-  { ip: "localhost", port: 2400 },
-  { ip: "localhost", port: 2500 },
-];
+const connections = [{ ip: "37.58.208.109", port: 8040 }];
 
 // To store which user is interested in which ip and port
 const userSubscriptions = {};
