@@ -2,8 +2,7 @@ const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
 const { listenToAISStreams } = require("./tcp-client");
-const { AisDecode } = require("ggencoder");
-const { Worker } = require("worker_threads"); // Using worker threads for heavy tasks
+const { Worker } = require("worker_threads");
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
@@ -17,18 +16,44 @@ const connections = [{ ip: "37.58.208.109", port: 8040 }];
 // To store which user is interested in which ip and port
 const userSubscriptions = {};
 
-// Function to decode AIS data in a separate worker thread
+// Worker pool setup
+const workerPool = [];
+
+// Function to get a worker from the pool or create a new one
+function getWorker(data) {
+  if (workerPool.length > 0) {
+    return workerPool.pop();
+  } else {
+    return new Worker("./decodeWorker.js", { workerData: data });
+  }
+}
+
+// Function to return a worker to the pool
+function returnWorker(worker) {
+  workerPool.push(worker);
+}
+
+// Function to decode AIS data using worker threads
 function decodeAisMessageInWorker(data) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker("./decodeWorker.js", {
-      workerData: data,
+    const worker = getWorker(data);
+    worker.postMessage(data);
+
+    worker.on("message", (decoded) => {
+      returnWorker(worker);
+      resolve(decoded);
     });
 
-    worker.on("message", (decoded) => resolve(decoded));
-    worker.on("error", (error) => reject(error));
+    worker.on("error", (error) => {
+      returnWorker(worker);
+      reject(error);
+    });
+
     worker.on("exit", (code) => {
-      if (code !== 0)
+      if (code !== 0) {
+        returnWorker(worker);
         reject(new Error(`Worker stopped with exit code ${code}`));
+      }
     });
   });
 }
